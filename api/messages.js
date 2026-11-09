@@ -1,6 +1,7 @@
 // POST /api/messages  — a visitor sends a message (starts or continues their thread)
 // Body: { name, email?, text, threadId?, token? }  → { threadId, token, thread }
 import { redis, LIMITS, newId, newToken, safeEqual, getThread, saveThread, publicThread, rateLimited, noStore } from "./_lib/store.js";
+import { adminSubs, saveAdminSubs, sendAll, preview } from "./_lib/push.js";
 
 export default async function handler(req, res) {
   noStore(res);
@@ -32,6 +33,15 @@ export default async function handler(req, res) {
   thread.updatedAt = now;
   thread.awaitingReply = true;
   await saveThread(thread);
+
+  // Notify your devices. A push failure never blocks the visitor's message.
+  try {
+    const subs = await adminSubs();
+    if (subs.length) {
+      const still = await sendAll(subs, { title: `New message from ${name}`, body: preview(text), url: "/admin" }, req);
+      if (still.length !== subs.length) await saveAdminSubs(still);
+    }
+  } catch (e) { console.error("Admin notify failed:", e.message); }
 
   return res.status(200).json({ threadId: thread.id, token: thread.token, thread: publicThread(thread) });
 }

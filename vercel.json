@@ -1,6 +1,7 @@
 {
   "cleanUrls": true,
   "headers": [
-    { "source": "/admin", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] }
+    { "source": "/admin", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] },
+    { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }, { "key": "Service-Worker-Allowed", "value": "/" }] }
   ]
 }

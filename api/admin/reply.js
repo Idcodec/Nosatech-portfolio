@@ -1,6 +1,7 @@
 // POST /api/admin/reply  — owner replies to a conversation (needs ADMIN_PASSWORD)
 // Body: { threadId, text }
 import { redis, isAdmin, LIMITS, getThread, saveThread, publicThread, noStore } from "../_lib/store.js";
+import { sendAll, preview } from "../_lib/push.js";
 
 export default async function handler(req, res) {
   noStore(res);
@@ -20,6 +21,17 @@ export default async function handler(req, res) {
   t.messages.push({ from: "owner", text: body, at: now });
   t.updatedAt = now;
   t.awaitingReply = false;
+
+  // Notify the visitor's devices if they turned notifications on.
+  let notified = 0;
+  if (t.subs && t.subs.length) {
+    try {
+      const before = t.subs.length;
+      t.subs = await sendAll(t.subs, { title: "Nosarhiemen replied", body: preview(body), url: "/#contact" }, req);
+      notified = t.subs.length;
+      if (t.subs.length !== before) console.log(`Dropped ${before - t.subs.length} expired subscription(s)`);
+    } catch (e) { console.error("Visitor notify failed:", e.message); }
+  }
   await saveThread(t);
-  return res.status(200).json({ thread: publicThread(t) });
+  return res.status(200).json({ thread: publicThread(t), notified });
 }

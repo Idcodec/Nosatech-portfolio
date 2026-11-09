@@ -17,7 +17,12 @@ api/messages.js       POST: visitor sends a message
 api/thread.js         GET: visitor reads their conversation
 api/admin/threads.js  GET: list all conversations (admin)
 api/admin/reply.js    POST: reply to a conversation (admin)
+api/push.js           Visitor turns reply notifications on/off
+api/admin/push.js     Owner turns new-message notifications on/off
 api/_lib/store.js     Redis helpers, auth, rate limiting
+api/_lib/push.js      Sends browser push notifications
+sw.js, notify.js      Browser side of notifications
+*.webmanifest, icons/ Lets the site be added to a phone's home screen
 vercel.json           Clean URLs (/admin instead of /admin.html)
 ```
 
@@ -61,8 +66,17 @@ vercel dev         # http://localhost:3000
 
 All portfolio text lives in `index.html`: the hero, services, stack and process sections. Colors and fonts are the tokens at the top of `styles.css`.
 
+## Notifications
+
+- **You:** open `/admin`, sign in, and click **Turn on notifications**. Do this on each device you want alerts on (laptop, phone). You'll get a notification for every new message, even with the tab closed.
+- **Visitors:** after sending a message, they can click **Notify me** to get a notification when you reply.
+- **iPhone / iPad:** Apple only allows web notifications for sites added to the Home Screen (iOS 16.4+). Open `/admin` in Safari → Share → **Add to Home Screen** → open **Reply Desk** from the home screen → sign in → **Turn on notifications**.
+- Android, Windows, Mac and Linux work in Chrome, Edge and Firefox. Safari on Mac works too.
+- No setup needed: the signing keys are created automatically on first use and stored in your database.
+- The browser tab title also shows a count, like "(2) Reply Desk", whenever there are unanswered messages.
+
 ## Notes
 
 - Visitors don't need an account. A conversation is tied to the browser that started it. If they clear their browser data or switch devices, they'll start a new conversation. Asking for an email gives you a fallback way to reach them.
 - There's basic spam protection: a hidden honeypot field, and a limit of 8 messages per IP every 10 minutes. Wrong admin passwords are also rate limited.
-- The reply desk refreshes every 30 seconds, and the visitor's page checks for replies every 20 seconds while it's open.
+- Privacy: each conversation can only be opened with a secret key stored in that visitor's browser. Visitors can't see each other's conversations, and `/admin` needs your password.

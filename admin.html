@@ -9,6 +9,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/styles.css">
+<link rel="manifest" href="/admin.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" href="/icons/icon-192.png">
+<meta name="theme-color" content="#13201A">
+<meta name="apple-mobile-web-app-title" content="Reply Desk">
+<script src="/notify.js" defer></script>
 </head>
 <body>
 <div class="wrap">
@@ -33,6 +39,10 @@
     <div class="inbox-head">
       <div><span class="label" style="padding:0">Reply desk</span><h1>Messages</h1></div>
       <div class="btns" style="align-items:center"><span class="note mono" id="inbox-count"></span><button class="btn ghost" id="reload" type="button">Refresh</button></div>
+    </div>
+    <div class="notify-box" id="notify-box" style="margin-bottom:16px">
+      <p class="note" id="notify-text">Get a notification on this device when someone sends a message.</p>
+      <button class="btn small accent" type="button" id="notify-btn">Turn on notifications</button>
     </div>
     <div class="panes">
       <div class="list" id="thread-list"><div class="empty">Loading messages…</div></div>
@@ -69,6 +79,9 @@
     }
     $("login").hidden = true; $("desk").hidden = false; $("logout").hidden = false;
     threads = j.threads || [];
+    const waiting = threads.filter((t) => t.awaitingReply).length;
+    document.title = waiting ? `(${waiting}) Reply Desk — N. Ekienabor` : "Reply Desk — N. Ekienabor";
+    updateNotifyUI();
     if (!threads.find((t) => t.id === activeId)) activeId = threads[0] ? threads[0].id : null;
     renderList(); renderConvo();
   }
@@ -152,11 +165,46 @@
       if (!r.ok) throw new Error(j.error || "Couldn't send the reply.");
       threads = threads.map((t) => (t.id === j.thread.id ? j.thread : t));
       threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-      $("r-text").value = ""; st.className = "note ok"; st.textContent = "Reply sent. The visitor sees it on the portfolio.";
+      $("r-text").value = ""; st.className = "note ok";
+      st.textContent = j.notified ? "Reply sent. The visitor was notified on their device." : "Reply sent. The visitor sees it next time they open the portfolio.";
       renderList(); renderConvo();
     } catch (err) { st.className = "note warn"; st.textContent = err.message; }
     finally { $("r-send").disabled = false; }
   });
+
+  /* ---------- notifications ---------- */
+  let subscribed = false;
+  async function updateNotifyUI() {
+    const P = window.PushHelper, btn = $("notify-btn"), txt = $("notify-text");
+    if (!P) return;
+    const why = P.blocker();
+    btn.hidden = false;
+    if (why === "ios") { btn.hidden = true; txt.textContent = "On iPhone or iPad: tap Share → Add to Home Screen, open Reply Desk from your home screen, sign in, then turn on notifications here."; return; }
+    if (why === "unsupported") { $("notify-box").hidden = true; return; }
+    if (why === "denied") { btn.hidden = true; txt.textContent = "Notifications are blocked for this site. Allow them in your browser's site settings, then reload."; return; }
+    subscribed = Boolean(await P.current());
+    txt.textContent = subscribed ? "Notifications are on for this device. You'll get one for every new message." : "Get a notification on this device when someone sends a message.";
+    btn.textContent = subscribed ? "Turn off" : "Turn on notifications";
+    btn.className = "btn small " + (subscribed ? "ghost" : "accent");
+  }
+  $("notify-btn").addEventListener("click", async () => {
+    const P = window.PushHelper, btn = $("notify-btn");
+    btn.disabled = true;
+    try {
+      if (subscribed) {
+        const sub = await P.unsubscribe();
+        if (sub) await api("/api/admin/push", { method: "DELETE", body: JSON.stringify({ endpoint: sub.endpoint }) });
+      } else {
+        const sub = await P.subscribe();
+        const r = await api("/api/admin/push", { method: "POST", body: JSON.stringify({ subscription: sub.toJSON() }) });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "Couldn't turn on notifications.");
+      }
+      await updateNotifyUI();
+    } catch (err) { $("notify-text").textContent = err.message; }
+    finally { btn.disabled = false; }
+  });
+  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", (e) => { if (e.data && e.data.type === "refresh" && pw) load(false); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && pw) load(false); });
 
   $("reload").addEventListener("click", () => load(false));
   $("logout").addEventListener("click", (e) => {

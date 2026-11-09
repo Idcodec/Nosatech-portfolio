@@ -9,6 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/styles.css">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" href="/icons/icon-192.png">
+<meta name="theme-color" content="#13201A">
+<script src="/notify.js" defer></script>
 </head>
 <body>
 <div class="wrap">
@@ -79,6 +84,10 @@
       <div class="thread" id="my-thread" hidden>
         <h3>Your conversation</h3>
         <div id="my-msgs" style="display:grid;gap:10px"></div>
+        <div class="notify-box" id="notify-box">
+          <p class="note" id="notify-text">Get a notification on this device when Nosarhiemen replies.</p>
+          <button class="btn small accent" type="button" id="notify-btn">Notify me</button>
+        </div>
       </div>
     </div>
   </section>
@@ -93,26 +102,46 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const KEY = "nosa-thread";
+  const SEEN = "nosa-seen-replies";
+  const baseTitle = document.title;
   const fmt = (t) => new Date(t).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
+  let saved = null, seen = 0, unread = 0, subscribed = false;
+  try { saved = JSON.parse(localStorage.getItem(KEY) || "null"); seen = +localStorage.getItem(SEEN) || 0; } catch (e) {}
+
+  function setUnread(n) {
+    unread = n;
+    document.title = n ? `(${n}) New reply · ${baseTitle}` : baseTitle;
+  }
+  function markRead(count) {
+    seen = count; setUnread(0);
+    try { localStorage.setItem(SEEN, String(count)); } catch (e) {}
+  }
 
   function render(thread) {
     const box = $("my-msgs");
     box.textContent = "";
     const msgs = (thread && thread.messages) || [];
     $("my-thread").hidden = !msgs.length;
+    const replies = msgs.filter((m) => m.from === "owner").length;
+    let ownerIndex = 0;
     for (const m of msgs) {
       const d = document.createElement("div");
-      d.className = "bubble" + (m.from === "owner" ? " owner" : "");
+      const isOwner = m.from === "owner";
+      if (isOwner) ownerIndex++;
+      d.className = "bubble" + (isOwner ? " owner" : "") + (isOwner && ownerIndex > seen ? " fresh" : "");
       const meta = document.createElement("span");
       meta.className = "meta";
-      meta.textContent = (m.from === "owner" ? "Nosarhiemen" : "You") + " · " + fmt(m.at);
+      meta.textContent = (isOwner ? "Nosarhiemen" : "You") + " · " + fmt(m.at);
       const t = document.createElement("div");
       t.className = "txt";
       t.textContent = m.text;
       d.append(meta, t);
       box.append(d);
+    }
+    // Count new replies; they count as read once the visitor is looking at the page.
+    if (replies > seen) {
+      if (document.hidden) setUnread(replies - seen);
+      else setTimeout(() => markRead(replies), 4000);
     }
     if (thread) {
       if (!$("f-name").value) $("f-name").value = thread.name || "";
@@ -129,6 +158,41 @@
     } catch (e) {}
   }
 
+  /* ---------- notifications ---------- */
+  async function updateNotifyUI() {
+    const P = window.PushHelper, btn = $("notify-btn"), txt = $("notify-text");
+    if (!P) return;
+    const why = P.blocker();
+    btn.hidden = false;
+    if (why === "ios") { btn.hidden = true; txt.textContent = "On iPhone or iPad, tap Share → Add to Home Screen, open the site from there, and you can turn on reply notifications."; return; }
+    if (why === "unsupported") { $("notify-box").hidden = true; return; }
+    if (why === "denied") { btn.hidden = true; txt.textContent = "Notifications are blocked for this site. Allow them in your browser's site settings to get reply alerts."; return; }
+    subscribed = Boolean(await P.current());
+    txt.textContent = subscribed ? "Notifications are on. You'll get one on this device when Nosarhiemen replies." : "Get a notification on this device when Nosarhiemen replies.";
+    btn.textContent = subscribed ? "Turn off" : "Notify me";
+    btn.className = "btn small " + (subscribed ? "ghost" : "accent");
+  }
+
+  $("notify-btn").addEventListener("click", async () => {
+    const P = window.PushHelper, btn = $("notify-btn"), txt = $("notify-text");
+    if (!saved) return;
+    btn.disabled = true;
+    try {
+      if (subscribed) {
+        const sub = await P.unsubscribe();
+        if (sub) await fetch("/api/push", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...saved, endpoint: sub.endpoint }) });
+      } else {
+        const sub = await P.subscribe();
+        const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...saved, subscription: sub.toJSON() }) });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "Couldn't turn on notifications.");
+      }
+      await updateNotifyUI();
+    } catch (err) {
+      txt.textContent = err.message;
+    } finally { btn.disabled = false; }
+  });
+
+  /* ---------- sending ---------- */
   $("msg-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const st = $("f-status");
@@ -147,9 +211,12 @@
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || "Couldn't send right now. Try again in a moment.");
       if (j.threadId) {
+        const isNew = !saved || saved.threadId !== j.threadId;
         saved = { threadId: j.threadId, token: j.token };
         try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {}
+        if (isNew) markRead(0);
         render(j.thread);
+        updateNotifyUI();
       }
       $("f-text").value = "";
       st.className = "note ok"; st.textContent = "Message sent. My reply will appear below.";
@@ -158,9 +225,11 @@
     } finally { $("f-send").disabled = false; }
   });
 
+  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", (e) => { if (e.data && e.data.type === "refresh") refresh(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { refresh(); if (unread) markRead(seen + unread); } });
+  window.addEventListener("load", updateNotifyUI);
   refresh();
-  setInterval(() => { if (!document.hidden) refresh(); }, 20000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+  setInterval(() => { refresh(); }, 20000);
 })();
 </script>
 </body>

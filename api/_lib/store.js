@@ -87,10 +87,10 @@ export async function listThreads(max = 200) {
   return (await redis.mget(ids.map((id) => `thread:${id}`))).filter(Boolean);
 }
 
-// Strip the visitor secret before sending a thread anywhere.
+// Strip the visitor secret and their device subscriptions before sending a thread anywhere.
 export function publicThread(t) {
-  const { token, ...rest } = t;
-  return rest;
+  const { token, subs, ...rest } = t;
+  return { ...rest, notify: Boolean(subs && subs.length) };
 }
 
 export function isAdmin(req) {
