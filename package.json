@@ -1,0 +1,16 @@
+{
+  "name": "nosarhiemen-portfolio",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Portfolio for Nosarhiemen Ekienabor with a contact form and a reply desk, deployed on Vercel.",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.34.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
