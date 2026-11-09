@@ -1,5 +1,5 @@
 // GET /api/admin/threads  — list all conversations, newest first (needs ADMIN_PASSWORD)
-import { redis, isAdmin, publicThread, rateLimited, noStore } from "../_lib/store.js";
+import { redis, isAdmin, listThreads, publicThread, rateLimited, noStore } from "../_lib/store.js";
 
 export default async function handler(req, res) {
   noStore(res);
@@ -10,9 +10,6 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Wrong password." });
   }
 
-  const ids = await redis.zrange("threads", 0, 199, { rev: true });
-  if (!ids.length) return res.status(200).json({ threads: [] });
-  const rows = await redis.mget(...ids.map((id) => `thread:${id}`));
-  const threads = rows.filter(Boolean).map(publicThread);
+  const threads = (await listThreads()).map(publicThread);
   return res.status(200).json({ threads });
 }

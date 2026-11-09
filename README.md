@@ -5,7 +5,7 @@ Portfolio site with a **Leave a message** form and a password-protected **Reply 
 - `/` is the portfolio. Visitors send a message and see your replies on the same page. Their conversation is remembered on their device with a private link token.
 - `/admin` is the reply desk. Sign in with your admin password, read conversations and reply.
 
-Built as plain HTML/CSS/JS with Vercel serverless functions and Upstash Redis for storage. No framework and no build step.
+Built as plain HTML/CSS/JS with Vercel serverless functions and Redis for storage (Redis Cloud or Upstash, both from Vercel's Storage tab). No framework and no build step.
 
 ## Project structure
 
@@ -37,7 +37,7 @@ vercel.json           Clean URLs (/admin instead of /admin.html)
    Go to vercel.com → **Add New → Project** → pick the repo → **Deploy**. Leave the framework preset as **Other**. There's no build command.
 
 3. **Add storage**
-   In the project, open the **Storage** tab → **Create Database** → choose **Upstash for Redis** (free plan) → connect it to the project. This adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` for you.
+   In the project, open the **Storage** tab → **Create Database** → choose **Redis** or **Upstash for Redis** (free plan) → connect it to the project. Either works. Redis adds `REDIS_URL`; Upstash adds `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
 
 4. **Set the admin password**
    **Settings → Environment Variables** → add `ADMIN_PASSWORD` with a long password of your choice.

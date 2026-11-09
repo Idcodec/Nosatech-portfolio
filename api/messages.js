@@ -5,7 +5,7 @@ import { redis, LIMITS, newId, newToken, safeEqual, getThread, saveThread, publi
 export default async function handler(req, res) {
   noStore(res);
   if (req.method !== "POST") return res.status(405).json({ error: "Use POST." });
-  if (!redis) return res.status(500).json({ error: "Storage isn't set up. Connect Upstash Redis in Vercel." });
+  if (!redis) return res.status(500).json({ error: "Storage isn't set up. Connect a Redis database in Vercel's Storage tab, then redeploy." });
 
   const b = req.body || {};
   const name = String(b.name || "").trim().slice(0, LIMITS.name);
